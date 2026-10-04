@@ -1,4 +1,6 @@
 from functools import lru_cache
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,6 +27,16 @@ class Settings(BaseSettings):
     seed_admin_email: str = "admin@example.com"
     seed_instructor_email: str = "instructor@example.com"
     seed_supervisor_email: str = "supervisor@example.com"
+
+    @field_validator("database_url")
+    @classmethod
+    def normalise_db_url(cls, v: str) -> str:
+        # Render/Heroku give postgres:// or postgresql://. SQLAlchemy 2.1 would pick psycopg (v3) for the
+        # latter; this project ships psycopg2, so pin the driver explicitly.
+        for prefix in ("postgres://", "postgresql://"):
+            if v.startswith(prefix):
+                return "postgresql+psycopg2://" + v[len(prefix):]
+        return v
 
     @property
     def cors_list(self) -> list[str]:
