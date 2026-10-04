@@ -17,6 +17,14 @@ VENUE = ("MIST Training Hall, Alausa Secretariat, Ikeja", 6.6186, 3.3569)
 STUDENTS = ["Adaeze Okafor", "Tunde Bakare", "Chiamaka Eze", "Ibrahim Lawal", "Folake Adeyemi", "Emeka Nwosu",
             "Zainab Sanni", "Seyi Ogunleye", "Blessing Udoh", "Kunle Adebayo", "Hauwa Musa", "David Olatunji"]
 
+# Real seeded student account. The existing Firebase identity is linked to this row
+# during seeding, so the account appears in the instructor's classes and supervisor's project.
+REAL_STUDENT = {
+    "firebase_uid": "2A9Hmec6HUVmMzIAo6qAK8UC8582",
+    "email": "tolutemitiwa@gmail.com",
+    "full_name": "Tioluwanimi Adeagbo",
+}
+
 
 def run(reset: bool = False):
     s = get_settings()
@@ -44,7 +52,41 @@ def run(reset: bool = False):
                  department_id=sw.id, unit_id=units["Software Development"].id)
     sup = User(email=s.seed_supervisor_email.lower(), full_name="Dr. Ngozi Adebisi", role="supervisor", department_id=sw.id)
     db.add_all([admin, instr, sup])
-    studs = []
+
+    # Reuse the real Firebase account if it already exists; otherwise provision it.
+    real_user = db.scalar(select(User).where(
+        (User.firebase_uid == REAL_STUDENT["firebase_uid"]) |
+        (User.email == REAL_STUDENT["email"].lower())
+    ))
+    if real_user:
+        real_user.firebase_uid = REAL_STUDENT["firebase_uid"]
+        real_user.email = REAL_STUDENT["email"].lower()
+        real_user.full_name = REAL_STUDENT["full_name"]
+        real_user.role = "student"
+        real_user.department_id = sw.id
+        real_user.unit_id = units["Software Development"].id
+        real_user.is_active = True
+        real_student = real_user.student
+        if not real_student:
+            real_student = Student()
+            real_user.student = real_student
+    else:
+        real_user = User(
+            firebase_uid=REAL_STUDENT["firebase_uid"],
+            email=REAL_STUDENT["email"].lower(),
+            full_name=REAL_STUDENT["full_name"],
+            role="student",
+            department_id=sw.id,
+            unit_id=units["Software Development"].id,
+        )
+        real_student = Student()
+        real_user.student = real_student
+
+    real_student.batch_id = batch.id
+    db.add(real_user)
+
+    # This list is used for class enrollment, attendance generation and project membership.
+    studs = [real_student]
     for i, name in enumerate(STUDENTS):
         unit = list(units.values())[0 if i < 6 else (1 if i < 9 else 2)]
         u = User(email=f"{name.split()[0].lower()}.{name.split()[1].lower()}@students.example.com", full_name=name,
