@@ -1,0 +1,11 @@
+{
+  "name": "MIST SIWES Hub",
+  "short_name": "SIWES Hub",
+  "description": "SIWES training, attendance and projects - Lagos State Ministry of Innovation, Science and Technology",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#5A3825",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
