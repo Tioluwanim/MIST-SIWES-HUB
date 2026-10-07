@@ -17,6 +17,8 @@ def get_claims(creds: HTTPAuthorizationCredentials | None = Depends(bearer)) -> 
     try:
         # looked up through the module so tests can patch it
         return security.verify_firebase_token(creds.credentials)
+    except security.FirebaseConfigError as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from exc
     except ValueError:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token",
                             headers={"WWW-Authenticate": "Bearer"})

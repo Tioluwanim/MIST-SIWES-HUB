@@ -17,20 +17,17 @@ VENUE = ("MIST Training Hall, Alausa Secretariat, Ikeja", 6.6186, 3.3569)
 STUDENTS = ["Adaeze Okafor", "Tunde Bakare", "Chiamaka Eze", "Ibrahim Lawal", "Folake Adeyemi", "Emeka Nwosu",
             "Zainab Sanni", "Seyi Ogunleye", "Blessing Udoh", "Kunle Adebayo", "Hauwa Musa", "David Olatunji"]
 
-# Real seeded student account. The existing Firebase identity is linked to this row
-# during seeding, so the account appears in the instructor's classes and supervisor's project.
-REAL_STUDENT = {
-    "firebase_uid": "2A9Hmec6HUVmMzIAo6qAK8UC8582",
-    "email": "tolutemitiwa@gmail.com",
-    "full_name": "Tioluwanimi Adeagbo",
-}
-
-
 def run_seed(db=None, *, include_demo: bool = True, staff_emails: dict | None = None, reset: bool = False):
     if not include_demo:
         return {"created": 0, "updated": 0, "skipped": 0}
     s = get_settings()
     staff_emails = staff_emails or {}
+    real_student_data = {
+        "firebase_uid": s.seed_real_student_uid.strip(),
+        "email": s.seed_real_student_email.strip().lower(),
+        "full_name": s.seed_real_student_name.strip(),
+    }
+    use_real_student = all(real_student_data.values())
     if reset:
         # Seed reset is deliberately non-destructive: production rows are not demo rows.
         with SessionLocal.begin() as reset_db:
@@ -70,39 +67,31 @@ def run_seed(db=None, *, include_demo: bool = True, staff_emails: dict | None = 
     db.add_all(staff)
 
     # Reuse the real Firebase account if it already exists; otherwise provision it.
-    real_user = db.scalar(select(User).where(
-        (User.firebase_uid == REAL_STUDENT["firebase_uid"]) |
-        (User.email == REAL_STUDENT["email"].lower())
-    ))
-    if real_user:
-        real_user.firebase_uid = REAL_STUDENT["firebase_uid"]
-        real_user.email = REAL_STUDENT["email"].lower()
-        real_user.full_name = REAL_STUDENT["full_name"]
-        real_user.role = "student"
-        real_user.department_id = sw.id
-        real_user.unit_id = units["Software Development"].id
-        real_user.is_active = True
-        real_student = real_user.student
-        if not real_student:
+    studs = []
+    if use_real_student:
+        real_user = db.scalar(select(User).where(
+            (User.firebase_uid == real_student_data["firebase_uid"]) |
+            (User.email == real_student_data["email"])
+        ))
+        if real_user:
+            real_user.firebase_uid = real_student_data["firebase_uid"]
+            real_user.email = real_student_data["email"]
+            real_user.full_name = real_student_data["full_name"]
+            real_user.role = "student"
+            real_user.department_id = sw.id
+            real_user.unit_id = units["Software Development"].id
+            real_user.is_active = True
+            real_student = real_user.student or Student()
+            real_user.student = real_student
+        else:
+            real_user = User(firebase_uid=real_student_data["firebase_uid"], email=real_student_data["email"],
+                             full_name=real_student_data["full_name"], role="student",
+                             department_id=sw.id, unit_id=units["Software Development"].id)
             real_student = Student()
             real_user.student = real_student
-    else:
-        real_user = User(
-            firebase_uid=REAL_STUDENT["firebase_uid"],
-            email=REAL_STUDENT["email"].lower(),
-            full_name=REAL_STUDENT["full_name"],
-            role="student",
-            department_id=sw.id,
-            unit_id=units["Software Development"].id,
-        )
-        real_student = Student()
-        real_user.student = real_student
-
-    real_student.batch_id = batch.id
-    db.add(real_user)
-
-    # This list is used for class enrollment, attendance generation and project membership.
-    studs = [real_student]
+        real_student.batch_id = batch.id
+        db.add(real_user)
+        studs.append(real_student)
     for i, name in enumerate(STUDENTS):
         unit = list(units.values())[0 if i < 6 else (1 if i < 9 else 2)]
         u = User(email=f"{name.split()[0].lower()}.{name.split()[1].lower()}@students.example.com", full_name=name,
@@ -133,7 +122,7 @@ def run_seed(db=None, *, include_demo: bool = True, staff_emails: dict | None = 
         d = today + timedelta(days=off)
         while d.weekday() >= 5:  # keep sessions on weekdays
             d += timedelta(days=1 if off >= 0 else -1)
-        ts = TrainingSession(training_class_id=cls.id, instructor_id=instr.id, title=title, date=d,
+        ts = TrainingSession(training_class_id=cls.id, instructor_id=instr.id if instr else None, title=title, date=d,
                              start_time=time(10, 0), end_time=time(12, 0), location=VENUE[0], latitude=VENUE[1],
                              longitude=VENUE[2], allowed_radius_meters=100,
                              attendance_status="Closed" if d < today else "Not Started")

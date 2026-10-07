@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
+from .security import firebase_status
 from .routers import admin_tools, announcements, attendance, auth, dashboard, files, org, projects, reports, training, users
 
 app = FastAPI(title="MIST SIWES Hub API", version="1.0.0")
@@ -17,4 +18,5 @@ app.include_router(admin_tools.router)
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    firebase = firebase_status()
+    return {"status": "ok", "firebase": firebase}

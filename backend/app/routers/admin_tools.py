@@ -73,7 +73,7 @@ def reset(body: dict, db: Session = Depends(get_db), me: User = Depends(admin)):
         "projects": (ProjectSubmission, ProjectMilestone, ProjectMember, ProjectSupervisor, Project),
         "announcements": (Announcement,),
         "training": (AttendanceRecord, AttendanceSession, TrainingSession, TrainingMaterial, ClassEnrollment, TrainingClass, TrainingProgram),
-        "students": (Student,),
+        "students": (Student, User),
         "all_except_admins": (AttendanceRecord, AttendanceSession, ProjectSubmission, ProjectMilestone, ProjectMember, ProjectSupervisor,
                               Project, Announcement, TrainingSession, TrainingMaterial, ClassEnrollment, TrainingClass, TrainingProgram,
                               Student, User, Unit, Department, SiwesBatch),
@@ -90,7 +90,7 @@ def reset(body: dict, db: Session = Depends(get_db), me: User = Depends(admin)):
 
 
 @router.get("/import/template")
-def import_template():
+def import_template(_: User = Depends(admin)):
     return StreamingResponse(BytesIO(template_bytes()), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                              headers={"Content-Disposition": 'attachment; filename="siwes-import-template.xlsx"'})
 

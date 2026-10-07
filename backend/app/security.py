@@ -65,6 +65,8 @@ def init_firebase() -> bool:
 
 def firebase_status() -> dict:
     """Safe to expose: contains no secrets."""
+    if not firebase_admin._apps and not _state["error"]:
+        init_firebase()
     ok = bool(firebase_admin._apps)
     return {"ready": ok, "project_id": _state["project_id"], "source": _state["source"],
             "error": None if ok else _state["error"]}

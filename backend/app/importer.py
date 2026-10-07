@@ -150,6 +150,7 @@ def import_sheets(db: Session, sheets: dict[str, list[dict]], *, dry_run: bool,
         summary = summaries[sheet]
         for excel_row, raw in enumerate(sheets[sheet], 2):
             row = {str(k).strip().casefold(): v for k, v in raw.items()}
+            savepoint = db.begin_nested()
             try:
                 if sheet == "Batches":
                     name = str(row.get("name") or "").strip()
@@ -234,7 +235,6 @@ def import_sheets(db: Session, sheets: dict[str, list[dict]], *, dry_run: bool,
                     summary["updated"] += 1
                 else:
                     obj = model(**values)
-                    if hasattr(obj, "is_demo"): obj.is_demo = True
                     db.add(obj); db.flush()
                     summary["created"] += 1
                 if sheet == "Students":
@@ -263,7 +263,9 @@ def import_sheets(db: Session, sheets: dict[str, list[dict]], *, dry_run: bool,
                             title = title.strip()
                             if title and not any(m.title.casefold() == title.casefold() for m in obj.milestones):
                                 obj.milestones.append(ProjectMilestone(title=title, position=index))
+                savepoint.commit()
             except Exception as exc:
+                savepoint.rollback()
                 error(summary, excel_row, "", str(exc))
                 summary["skipped"] += 1
                 if not skip_invalid:

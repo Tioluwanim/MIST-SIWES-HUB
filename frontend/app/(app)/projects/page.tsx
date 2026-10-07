@@ -24,7 +24,7 @@ export default function ProjectsPage() {
         {data?.length === 0 ? <Empty title="No projects yet" hint={admin ? "Create a project, then assign students and a supervisor." : "Your projects will appear here once assigned."} /> : (
           <div className="grid gap-4 md:grid-cols-2">{data?.map((p) => (
             <Link key={p.id} href={`/projects/${p.id}`} className="card block p-4 hover:border-brand sm:p-5">
-              <div className="flex items-start justify-between gap-2"><p className="font-bold">{p.title}</p><Badge>{p.status}</Badge></div>
+              <div className="flex items-start justify-between gap-2"><p className="font-bold">{p.title}</p><div className="flex items-center gap-2"><Badge>{p.status}</Badge>{admin && <button className="btn-secondary btn-sm text-bad" onClick={(e) => { e.preventDefault(); if (window.confirm(`Delete ${p.title}?`)) api(`/api/admin/projects/${p.id}?force=true`, { method: "DELETE" }).then(() => reload(true)); }}>Delete</button>}</div></div>
               <p className="mt-1 line-clamp-2 text-sm text-ink-soft">{p.description}</p>
               <div className="my-3"><ProgressBar value={p.progress} /></div>
               <p className="text-xs text-ink-faint">{p.progress}% complete · {p.member_count} student{p.member_count === 1 ? "" : "s"}{p.supervisors[0] && ` · ${p.supervisors.map((s) => s.name).join(", ")}`}{p.deadline && ` · due ${fmtDate(p.deadline)}`}</p>

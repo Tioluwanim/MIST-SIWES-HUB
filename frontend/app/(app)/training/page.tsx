@@ -12,7 +12,7 @@ import type { Session } from "@/lib/types";
 
 interface Cls { id: number; name: string; program_name: string; batch_name: string; instructor_name: string | null; student_count: number | null }
 
-function ClassList({ canEdit }: { canEdit: boolean }) {
+function ClassList({ canEdit, onDelete }: { canEdit: boolean; onDelete?: (id: number) => void }) {
   const { data, loading, error, reload } = useFetch<Cls[]>("/api/training/classes");
   const [openId, setOpenId] = useState<number | null>(null);
   return (
@@ -20,7 +20,7 @@ function ClassList({ canEdit }: { canEdit: boolean }) {
       {data?.length === 0 ? <Empty title="No classes yet" hint={canEdit ? "Create a class to get started." : "You will see your classes once you are enrolled."} /> : (
         <div className="grid gap-4 md:grid-cols-2">{data?.map((c) => (
           <Card key={c.id}>
-            <p className="font-bold">{c.name}</p>
+            <div className="flex items-start justify-between gap-2"><p className="font-bold">{c.name}</p>{onDelete && <button className="btn-secondary btn-sm text-bad" onClick={() => onDelete(c.id)}>Delete</button>}</div>
             <p className="text-sm text-ink-soft">{c.program_name} · {c.batch_name}</p>
             <p className="mt-1 text-sm text-ink-soft">{c.instructor_name ? `Instructor: ${c.instructor_name}` : "No instructor assigned"}{canEdit && c.student_count != null && ` · ${c.student_count} students`}</p>
             <button className="btn-secondary btn-sm mt-3" onClick={() => setOpenId(openId === c.id ? null : c.id)}>{openId === c.id ? "Hide materials" : "Materials"}</button>
@@ -64,9 +64,9 @@ function AdminTraining() {
         <>
           <div className="flex flex-wrap gap-2"><button className="btn-primary" onClick={() => setDlg("program")}>New program</button><button className="btn-secondary" onClick={() => setDlg("class")}>New class</button></div>
           <Card title="Programs"><State loading={programs.loading} error={programs.error} onRetry={programs.reload}>
-            {programs.data?.length ? <ul className="divide-y divide-line text-sm">{programs.data.map((p) => <li key={p.id} className="flex justify-between py-2"><b>{p.name}</b><Badge>{p.batch_name}</Badge></li>)}</ul> : <p className="text-sm text-ink-soft">No programs yet. Create a SIWES batch in Settings first, then add a program.</p>}
+            {programs.data?.length ? <ul className="divide-y divide-line text-sm">{programs.data.map((p) => <li key={p.id} className="flex items-center justify-between gap-2 py-2"><b>{p.name}</b><span className="flex items-center gap-2"><Badge>{p.batch_name}</Badge><button className="btn-secondary btn-sm text-bad" onClick={() => { if (window.confirm("Delete this program and its classes?")) api(`/api/admin/programs/${p.id}?force=true`, { method: "DELETE" }).then(() => setRev((r) => r + 1)); }}>Delete</button></span></li>)}</ul> : <p className="text-sm text-ink-soft">No programs yet. Create a SIWES batch in Settings first, then add a program.</p>}
           </State></Card>
-          <ClassList key={rev} canEdit />
+          <ClassList key={rev} canEdit onDelete={(id) => { if (window.confirm("Delete this class and its sessions?")) api(`/api/admin/classes/${id}?force=true`, { method: "DELETE" }).then(() => setRev((r) => r + 1)); }} />
         </>
       )}
       {dlg === "program" && <FormDialog title="New training program" onClose={() => setDlg(null)} fields={[

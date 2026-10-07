@@ -19,7 +19,7 @@ function messageFrom(detail: unknown, fallback: string): string {
 async function authHeader(): Promise<Record<string, string>> {
   const u = auth.currentUser;
   if (!u) return {};
-  return { Authorization: `Bearer ${await u.getIdToken()}` };
+  return { Authorization: "Bearer " + (await u.getIdToken()) };
 }
 
 export async function api<T = any>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
