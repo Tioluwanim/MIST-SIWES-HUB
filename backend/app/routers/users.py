@@ -1,14 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from ..db import get_db
+from ..config import get_settings
 from ..deps import require_roles
 from ..models import (ClassEnrollment, Department, Project, ProjectMember, ProjectSupervisor, SiwesBatch, Student,
                       TrainingClass, Unit, User)
-from ..schemas import UserCreate, UserUpdate
+from ..schemas import RoleUpdate, UserCreate, UserUpdate
 from ..services import enroll_student_in_batch_classes, student_stats, user_out
+from .admin_tools import record
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 students_router = APIRouter(prefix="/api/students", tags=["students"])
@@ -55,6 +57,7 @@ def create_user(body: UserCreate, db: Session = Depends(get_db), _: User = Depen
         raise HTTPException(409, "A user with that email already exists")
     if u.student:
         enroll_student_in_batch_classes(db, u.student)
+    record(db, _, "create_user", "user", u.id, {"role": u.role})
     db.commit()
     return user_out(u)
 
@@ -80,8 +83,46 @@ def update_user(user_id: int, body: UserUpdate, db: Session = Depends(get_db), m
         db.flush()
         if "batch_id" in data:
             enroll_student_in_batch_classes(db, u.student)
+    record(db, me, "update_user", "user", u.id, {"fields": sorted(data)})
     db.commit()
     return user_out(u)
+
+
+@router.patch("/{user_id}/role")
+@router.patch("/{user_id}/roles")
+def update_role(user_id: int, body: RoleUpdate, db: Session = Depends(get_db), me: User = Depends(admin)):
+    u = db.get(User, user_id)
+    if not u:
+        raise HTTPException(404, "User not found")
+    if u.id == me.id and body.role != "admin":
+        raise HTTPException(400, "You cannot demote your own account")
+    old = u.role
+    u.role = body.role
+    if body.role == "student" and not u.student:
+        u.student = Student()
+    record(db, me, "update_role", "user", u.id, {"from": old, "to": body.role})
+    db.commit()
+    return user_out(u)
+
+
+@router.delete("/{user_id}")
+def delete_user(user_id: int, hard: bool = False, db: Session = Depends(get_db), me: User = Depends(admin)):
+    u = db.get(User, user_id)
+    if not u:
+        raise HTTPException(404, "User not found")
+    if u.id == me.id:
+        raise HTTPException(400, "You cannot delete your own account")
+    if u.role == "admin" and u.is_active and db.scalar(select(func.count(User.id)).where(User.role == "admin", User.is_active.is_(True))) <= 1:
+        raise HTTPException(409, "You cannot delete or deactivate the last active admin")
+    if hard:
+        if not get_settings().allow_destructive_admin:
+            raise HTTPException(403, "Destructive admin operations are disabled; set ALLOW_DESTRUCTIVE_ADMIN=true")
+        db.delete(u)
+    else:
+        u.is_active = False
+    record(db, me, "delete_user", "user", u.id, {"email": u.email, "hard": hard})
+    db.commit()
+    return {"ok": True, "deactivated": not hard}
 
 
 @students_router.get("")

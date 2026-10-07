@@ -25,6 +25,23 @@ pytest                      # SQLite, Firebase mocked
 ```
 Set `SEED_ADMIN_EMAIL` (etc.) to emails you can sign in with. Sign in with that email (verified) and the seeded role is linked to your Firebase account. Anyone else who signs up becomes a `student`; admins assign batch, department and unit under Interns.
 
+### Backend administration
+
+The Settings > Admin tools dashboard can seed demo data, manage all four user
+roles, import workbooks, deactivate users, reset scoped data, and inspect the
+audit log. Destructive actions are disabled by default; set
+`ALLOW_DESTRUCTIVE_ADMIN=true` only for an administrator who explicitly needs
+deletes or resets. Regular user deletion is a safe deactivation.
+
+Imports accept `.xlsx` or `.csv` (CSV requires a `type` query parameter), are
+limited to 5 MB and 5,000 rows, and are processed in dependency order with
+case-insensitive reference matching. Download the workbook from
+`GET /api/admin/import/template`; its Instructions sheet documents all sheets,
+`YYYY-MM-DD` dates, `HH:MM` times and semicolon-separated list columns.
+Imports are upserts and non-destructive. A dry run writes nothing; invalid
+rows can be skipped explicitly with `skip_invalid=true`. Run
+`alembic upgrade head` after pulling backend schema changes.
+
 ## 3. Frontend
 ```bash
 cd frontend

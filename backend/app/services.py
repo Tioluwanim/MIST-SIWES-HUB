@@ -14,6 +14,7 @@ def user_out(u: User) -> dict:
     st = u.student
     return {
         "id": u.id, "email": u.email, "full_name": u.full_name, "role": u.role, "is_active": u.is_active,
+        "is_demo": u.is_demo,
         "department": {"id": u.department.id, "name": u.department.name} if u.department else None,
         "unit": {"id": u.unit.id, "name": u.unit.name} if u.unit else None,
         "student_id": st.id if st else None,

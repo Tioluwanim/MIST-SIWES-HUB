@@ -1,3 +1,4 @@
+from datetime import datetime as DateTime
 from datetime import date as Date
 from datetime import time as Time
 from typing import Literal
@@ -80,6 +81,24 @@ class UserUpdate(BaseModel):
     batch_id: int | None = None
     matric_no: str | None = None
     institution: str | None = None
+
+
+class RoleUpdate(BaseModel):
+    role: Role
+
+
+class DestructiveAction(BaseModel):
+    confirmation: str = Field(min_length=1, max_length=80)
+
+
+class AuditLogOut(ORM):
+    id: int
+    admin_user_id: int | None
+    action: str
+    target_type: str
+    target_id: str | None
+    details: dict
+    created_at: DateTime
 
 
 class SyncIn(BaseModel):

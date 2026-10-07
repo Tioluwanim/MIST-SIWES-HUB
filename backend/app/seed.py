@@ -3,7 +3,7 @@ import random
 import sys
 from datetime import date, datetime, time, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from .config import get_settings
 from .db import Base, SessionLocal, engine
@@ -26,15 +26,26 @@ REAL_STUDENT = {
 }
 
 
-def run(reset: bool = False):
+def run_seed(db=None, *, include_demo: bool = True, staff_emails: dict | None = None, reset: bool = False):
+    if not include_demo:
+        return {"created": 0, "updated": 0, "skipped": 0}
     s = get_settings()
+    staff_emails = staff_emails or {}
     if reset:
-        Base.metadata.drop_all(engine)
+        # Seed reset is deliberately non-destructive: production rows are not demo rows.
+        with SessionLocal.begin() as reset_db:
+            for mapper in reversed(list(User.registry.mappers)):
+                model = mapper.class_
+                if hasattr(model, "is_demo"):
+                    reset_db.execute(delete(model).where(model.is_demo.is_(True)))
     Base.metadata.create_all(engine)  # no-op when Alembic already created the tables
-    db = SessionLocal()
+    owns_session = db is None
+    db = db or SessionLocal()
     if db.scalar(select(Department.id).limit(1)):
         print("Database already seeded (use --reset to start over).")
-        return
+        if owns_session:
+            db.close()
+        return {"created": 0, "updated": 0, "skipped": 1}
     random.seed(7)
     sw = Department(name="Software & Digital Services")
     hw = Department(name="Hardware & Embedded Systems")
@@ -47,11 +58,16 @@ def run(reset: bool = False):
     db.add_all([batch, SiwesBatch(name="2027 SIWES Batch", year=2027, is_active=False)])
     db.flush()
 
-    admin = User(email=s.seed_admin_email.lower(), full_name="Folasade Williams", role="admin")
-    instr = User(email=s.seed_instructor_email.lower(), full_name="Engr. Kayode Balogun", role="instructor",
-                 department_id=sw.id, unit_id=units["Software Development"].id)
-    sup = User(email=s.seed_supervisor_email.lower(), full_name="Dr. Ngozi Adebisi", role="supervisor", department_id=sw.id)
-    db.add_all([admin, instr, sup])
+    admin_email = staff_emails.get("admin") or (s.seed_admin_email if "@" in s.seed_admin_email and not s.seed_admin_email.endswith("@example.com") else None)
+    instructor_email = staff_emails.get("instructor")
+    supervisor_email = staff_emails.get("supervisor")
+    staff = []
+    admin = User(email=admin_email.lower(), full_name="Folasade Williams", role="admin") if admin_email else None
+    instr = User(email=instructor_email.lower(), full_name="Engr. Kayode Balogun", role="instructor",
+                 department_id=sw.id, unit_id=units["Software Development"].id) if instructor_email else None
+    sup = User(email=supervisor_email.lower(), full_name="Dr. Ngozi Adebisi", role="supervisor", department_id=sw.id) if supervisor_email else None
+    staff = [u for u in (admin, instr, sup) if u]
+    db.add_all(staff)
 
     # Reuse the real Firebase account if it already exists; otherwise provision it.
     real_user = db.scalar(select(User).where(
@@ -100,8 +116,8 @@ def run(reset: bool = False):
                            description="Core engineering practice for software interns.")
     db.add(prog)
     db.flush()
-    backend = TrainingClass(program_id=prog.id, instructor_id=instr.id, name="Backend Development")
-    frontend = TrainingClass(program_id=prog.id, instructor_id=instr.id, name="Frontend Engineering")
+    backend = TrainingClass(program_id=prog.id, instructor_id=instr.id if instr else None, name="Backend Development")
+    frontend = TrainingClass(program_id=prog.id, instructor_id=instr.id if instr else None, name="Frontend Engineering")
     db.add_all([backend, frontend])
     db.flush()
     for c in (backend, frontend):
@@ -127,7 +143,7 @@ def run(reset: bool = False):
     for ts in sessions:
         if ts.attendance_status != "Closed":
             continue
-        db.add(AttendanceSession(session_id=ts.id, is_active=False, started_by=instr.id,
+        db.add(AttendanceSession(session_id=ts.id, is_active=False, started_by=instr.id if instr else None,
                                  started_at=datetime.combine(ts.date, time(9, 0)), ended_at=datetime.combine(ts.date, time(11, 0))))
         for i, st in enumerate(studs):
             r = random.random()
@@ -140,7 +156,7 @@ def run(reset: bool = False):
                 latitude=VENUE[1] + random.uniform(-0.0003, 0.0003) if qr else None,
                 longitude=VENUE[2] + random.uniform(-0.0003, 0.0003) if qr else None,
                 distance_meters=round(random.uniform(5, 70), 1) if qr else None,
-                remarks=None if qr else "Auto-marked absent when attendance closed", marked_by=None if qr else instr.id))
+                remarks=None if qr else "Auto-marked absent when attendance closed", marked_by=None if qr and instr else (instr.id if instr else None)))
 
     proj = Project(batch_id=batch.id, title="MIST Attendance Platform",
                    description="Internal attendance and project tracking tool for the ministry's SIWES programme.",
@@ -152,7 +168,8 @@ def run(reset: bool = False):
         proj.milestones.append(m)
     for st in studs[:4]:
         proj.members.append(ProjectMember(student_id=st.id))
-    proj.supervisors.append(ProjectSupervisor(user_id=sup.id))
+    if sup:
+        proj.supervisors.append(ProjectSupervisor(user_id=sup.id))
     db.add(proj)
     db.flush()
     recompute_project(proj)
@@ -162,16 +179,29 @@ def run(reset: bool = False):
         worked_on="Implemented attendance verification API.", challenges="Handled duplicate attendance requests.",
         next_steps="Build attendance dashboard.", repo_url="https://github.com/example/mist-attendance"))
     db.add_all([
-        Announcement(title="Welcome to the 2026 SIWES Batch", audience="batch", batch_id=batch.id, created_by=admin.id,
+        Announcement(title="Welcome to the 2026 SIWES Batch", audience="batch", batch_id=batch.id, created_by=admin.id if admin else None,
                      message="Sessions run weekdays from 10:00 at the MIST Training Hall. Bring your laptop and your ID."),
-        Announcement(title="Attendance reminder", audience="all", created_by=admin.id,
+        Announcement(title="Attendance reminder", audience="all", created_by=admin.id if admin else None,
                      message="Scan the QR code shown by your instructor while you are in the training hall. Location access is required."),
-        Announcement(title="Backend class: install PostgreSQL", audience="class", class_id=backend.id, created_by=instr.id,
+        Announcement(title="Backend class: install PostgreSQL", audience="class", class_id=backend.id, created_by=instr.id if instr else None,
                      message="Please install PostgreSQL 15+ before the next session."),
     ])
-    db.commit()
-    print(f"Seeded. Admin: {admin.email} | Instructor: {instr.email} | Supervisor: {sup.email}")
-    print("Create Firebase accounts (or use Google sign-in) with these exact emails and verify them to activate the roles.")
+    # Mark the complete graph (including attendance and join rows where supported)
+    # as demo data in one place, so future seed additions cannot be forgotten.
+    for obj in list(db.identity_map.values()) + list(db.new):
+        if hasattr(obj, "is_demo"):
+            obj.is_demo = True
+    if owns_session:
+        db.commit()
+    if owns_session:
+        db.close()
+    return {"created": len(list(db.identity_map)) if db else 0, "updated": 0, "skipped": 0}
+
+
+def run(reset: bool = False, db=None):
+    return run_seed(db, reset=reset, staff_emails={"instructor": get_settings().seed_instructor_email,
+                                                    "supervisor": get_settings().seed_supervisor_email,
+                                                    "admin": get_settings().seed_admin_email})
 
 
 if __name__ == "__main__":

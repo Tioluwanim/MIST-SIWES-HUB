@@ -10,6 +10,8 @@ from .db import Base
 class TimestampMixin:
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    # Seeded records are disposable; production records are never marked demo.
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
 
 
 class Department(TimestampMixin, Base):
@@ -234,3 +236,15 @@ class Announcement(TimestampMixin, Base):
     department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.id", ondelete="CASCADE"))
     class_id: Mapped[int | None] = mapped_column(ForeignKey("training_classes.id", ondelete="CASCADE"))
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    admin_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    action: Mapped[str] = mapped_column(String(80), index=True)
+    target_type: Mapped[str] = mapped_column(String(80))
+    target_id: Mapped[str | None] = mapped_column(String(80))
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+    admin_user: Mapped[User | None] = relationship()

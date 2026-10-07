@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     storage_backend: str = "local"
     upload_dir: str = "./uploads"
     max_upload_mb: int = 10
+    max_import_mb: int = 5
+    max_import_rows: int = 5000
+    allow_destructive_admin: bool = False
     s3_bucket: str = ""
     s3_region: str = ""
     s3_endpoint_url: str = ""
