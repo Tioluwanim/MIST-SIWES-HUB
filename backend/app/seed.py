@@ -41,7 +41,7 @@ def run_seed(db=None, *, include_demo: bool = True, staff_emails: dict | None = 
     Base.metadata.create_all(engine)  # no-op when Alembic already created the tables
     owns_session = db is None
     db = db or SessionLocal()
-    if db.scalar(select(Department.id).limit(1)):
+    if db.scalar(select(Department.id).where(Department.is_demo.is_(True)).limit(1)):
         print("Database already seeded (use --reset to start over).")
         if owns_session:
             db.close()
