@@ -39,7 +39,6 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
   return data as T;
 }
 
-/** Fetch a protected file/CSV with the ID token and hand it to the browser as a download. */
 export async function download(path: string, filename: string) {
   const res = await fetch(path.startsWith("http") ? path : `${API_URL}${path}`, { headers: await authHeader() });
   if (!res.ok) throw new ApiError(res.status, "Download failed");
@@ -58,4 +57,13 @@ export async function upload(file: File): Promise<{ name: string; url: string }>
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new ApiError(res.status, messageFrom(data?.detail, "Upload failed"));
   return data;
+}
+
+export async function uploadFile<T = any>(path: string, file: File): Promise<T> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_URL}${path}`, { method: "POST", headers: await authHeader(), body: form });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new ApiError(res.status, messageFrom(data?.detail, "Upload failed"));
+  return data as T;
 }
