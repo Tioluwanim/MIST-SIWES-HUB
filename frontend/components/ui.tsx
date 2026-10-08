@@ -98,7 +98,7 @@ export function Stat({ label, value, hint }: { label: string; value: ReactNode; 
 }
 
 const TONES: Record<string, string> = {
-  Present: "bg-ok-soft text-ok", Approved: "bg-ok-soft text-ok", Completed: "bg-ok-soft text-ok", Closed: "bg-surface-deep text-ink-soft",
+  Present: "bg-ok-soft text-ok", Active: "bg-ok-soft text-ok", Inactive: "bg-surface-deep text-ink-soft", Approved: "bg-ok-soft text-ok", Completed: "bg-ok-soft text-ok", Closed: "bg-surface-deep text-ink-soft",
   Late: "bg-warn-soft text-warn", Pending: "bg-warn-soft text-warn", "Under Review": "bg-warn-soft text-warn", Excused: "bg-brand-soft text-brand",
   Absent: "bg-bad-soft text-bad", "Changes Requested": "bg-bad-soft text-bad", Open: "bg-ok-soft text-ok",
   "In Progress": "bg-brand-soft text-brand", "Not Started": "bg-surface-deep text-ink-soft",

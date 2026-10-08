@@ -5,10 +5,11 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..db import get_db
 from ..config import get_settings
+from ..security import delete_firebase_user
 from ..deps import require_roles
 from ..models import (ClassEnrollment, Department, Project, ProjectMember, ProjectSupervisor, SiwesBatch, Student,
                       TrainingClass, Unit, User)
-from ..schemas import RoleUpdate, UserCreate, UserUpdate
+from ..schemas import MyProfileUpdate, RoleUpdate, UserCreate, UserUpdate
 from ..services import enroll_student_in_batch_classes, student_stats, user_out
 from .admin_tools import record
 
@@ -48,7 +49,7 @@ def create_user(body: UserCreate, db: Session = Depends(get_db), _: User = Depen
     u = User(email=body.email, full_name=body.full_name, role=body.role,
              department_id=body.department_id, unit_id=body.unit_id)
     if body.role == "student":
-        u.student = Student(batch_id=body.batch_id, matric_no=body.matric_no, institution=body.institution)
+        u.student = Student(batch_id=body.batch_id, matric_no=body.matric_no, institution=body.institution, phone=body.phone)
     db.add(u)
     try:
         db.flush()
@@ -77,7 +78,7 @@ def update_user(user_id: int, body: UserUpdate, db: Session = Depends(get_db), m
     if u.role == "student" and not u.student:
         u.student = Student()
     if u.student:
-        for k in ("batch_id", "matric_no", "institution"):
+        for k in ("batch_id", "matric_no", "institution", "phone"):
             if k in data:
                 setattr(u.student, k, data[k])
         db.flush()
@@ -120,9 +121,25 @@ def delete_user(user_id: int, hard: bool = False, db: Session = Depends(get_db),
         db.delete(u)
     else:
         u.is_active = False
+    firebase_uid = u.firebase_uid if hard else None
     record(db, me, "delete_user", "user", u.id, {"email": u.email, "hard": hard})
     db.commit()
+    if firebase_uid:
+        delete_firebase_user(firebase_uid)  # best effort; never fails the request
     return {"ok": True, "deactivated": not hard}
+
+
+@students_router.patch("/me/profile")
+def update_my_profile(body: MyProfileUpdate, db: Session = Depends(get_db), me: User = Depends(require_roles("student"))):
+    """A student chooses their own department and unit. The user is always taken from the verified token."""
+    dep, unit = db.get(Department, body.department_id), db.get(Unit, body.unit_id)
+    if not dep or not unit:
+        raise HTTPException(404, "Department or unit not found")
+    if unit.department_id != dep.id:
+        raise HTTPException(422, "That unit does not belong to the chosen department")
+    me.department_id, me.unit_id = dep.id, unit.id
+    db.commit()
+    return user_out(me)
 
 
 @students_router.get("")

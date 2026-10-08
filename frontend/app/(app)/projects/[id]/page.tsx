@@ -1,7 +1,8 @@
 "use client";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
+import { DeleteButton } from "@/components/admin/DeleteButton";
 import { FormDialog } from "@/components/FormDialog";
 import { SubmissionCard } from "@/components/projects/SubmissionCard";
 import { SubmitUpdate } from "@/components/projects/SubmitUpdate";
@@ -18,6 +19,7 @@ export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const { profile } = useAuth();
   const role = profile!.role;
+  const router = useRouter();
   const p = useFetch<Project>(`/api/projects/${id}`);
   const subs = useFetch<Submission[]>(`/api/submissions?project_id=${id}`);
   const [dlg, setDlg] = useState<null | "milestone" | "assign" | "submit">(null);
@@ -35,6 +37,7 @@ export default function ProjectDetail() {
         <>
           <PageHeader title={p.data.title} subtitle={p.data.description ?? undefined} actions={<>
             <Link href="/projects" className="btn-secondary btn-sm">All projects</Link>
+            {role === "admin" && <DeleteButton path={`/api/admin/projects/${id}`} noun="project" onDone={() => router.push("/projects")} />}
             {role === "student" && <button className="btn-primary btn-sm" onClick={() => setDlg("submit")}>Submit update</button>}
           </>} />
           {err && <p className="mb-4 rounded-md bg-bad-soft p-3 text-sm text-bad" role="alert">{err}</p>}
@@ -50,7 +53,8 @@ export default function ProjectDetail() {
                 {p.data.milestones?.length ? <ul className="divide-y divide-line">{p.data.milestones.map((m) => (
                   <li key={m.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
                     <div><p className="font-semibold">{m.title}</p><p className="text-xs text-ink-faint">{m.due_date ? `Due ${fmtDate(m.due_date)}` : "No due date"}{m.completed_at && ` · completed ${fmtDate(m.completed_at)}`}</p></div>
-                    {manage ? <select aria-label={`Status of ${m.title}`} className="input !w-auto" value={m.status} onChange={(e) => run(() => api(`/api/milestones/${m.id}`, { method: "PATCH", body: { status: e.target.value } }))}>{["Not Started", "In Progress", "Completed"].map((s) => <option key={s}>{s}</option>)}</select> : <Badge>{m.status}</Badge>}
+                    <div className="flex items-center gap-2">{role === "admin" && <DeleteButton path={`/api/admin/milestones/${m.id}`} noun="milestone" onDone={refresh} />}
+                    {manage ? <select aria-label={`Status of ${m.title}`} className="input !w-auto" value={m.status} onChange={(e) => run(() => api(`/api/milestones/${m.id}`, { method: "PATCH", body: { status: e.target.value } }))}>{["Not Started", "In Progress", "Completed"].map((s) => <option key={s}>{s}</option>)}</select> : <Badge>{m.status}</Badge>}</div>
                   </li>))}</ul> : <Empty title="No milestones" />}
               </Card>
               <section>

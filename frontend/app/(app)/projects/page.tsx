@@ -4,7 +4,7 @@ import { useState } from "react";
 import { FormDialog } from "@/components/FormDialog";
 import { Badge, Empty, PageHeader, ProgressBar, State } from "@/components/ui";
 import { useAuth } from "@/context/AuthContext";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { fmtDate } from "@/lib/format";
 import { useFetch } from "@/lib/hooks";
 import type { Project } from "@/lib/types";
@@ -14,6 +14,17 @@ export default function ProjectsPage() {
   const admin = profile!.role === "admin";
   const { data, loading, error, reload } = useFetch<Project[]>("/api/projects");
   const [open, setOpen] = useState(false);
+  // Asks first; if the server reports dependants (progress updates, team) it says what they are before forcing.
+  async function deleteProject(id: number, title: string) {
+    if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
+    try { await api(`/api/admin/projects/${id}`, { method: "DELETE" }); }
+    catch (e) {
+      if ((e as ApiError).status === 409 && window.confirm(`${(e as Error).message}\n\nDelete anyway?`)) {
+        try { await api(`/api/admin/projects/${id}?force=true`, { method: "DELETE" }); } catch (e2) { window.alert((e2 as Error).message); return; }
+      } else { window.alert((e as Error).message); return; }
+    }
+    reload(true);
+  }
   const batches = useFetch<{ id: number; name: string }[]>(admin ? "/api/batches" : null);
   const students = useFetch<{ student_id: number; full_name: string }[]>(admin ? "/api/students" : null);
   const sups = useFetch<{ id: number; full_name: string }[]>(admin ? "/api/users?role=supervisor" : null);
@@ -24,7 +35,7 @@ export default function ProjectsPage() {
         {data?.length === 0 ? <Empty title="No projects yet" hint={admin ? "Create a project, then assign students and a supervisor." : "Your projects will appear here once assigned."} /> : (
           <div className="grid gap-4 md:grid-cols-2">{data?.map((p) => (
             <Link key={p.id} href={`/projects/${p.id}`} className="card block p-4 hover:border-brand sm:p-5">
-              <div className="flex items-start justify-between gap-2"><p className="font-bold">{p.title}</p><div className="flex items-center gap-2"><Badge>{p.status}</Badge>{admin && <button className="btn-secondary btn-sm text-bad" onClick={(e) => { e.preventDefault(); if (window.confirm(`Delete ${p.title}?`)) api(`/api/admin/projects/${p.id}?force=true`, { method: "DELETE" }).then(() => reload(true)); }}>Delete</button>}</div></div>
+              <div className="flex items-start justify-between gap-2"><p className="font-bold">{p.title}</p><div className="flex items-center gap-2"><Badge>{p.status}</Badge>{admin && <button className="btn-secondary btn-sm text-bad" onClick={(e) => { e.preventDefault(); deleteProject(p.id, p.title); }}>Delete</button>}</div></div>
               <p className="mt-1 line-clamp-2 text-sm text-ink-soft">{p.description}</p>
               <div className="my-3"><ProgressBar value={p.progress} /></div>
               <p className="text-xs text-ink-faint">{p.progress}% complete · {p.member_count} student{p.member_count === 1 ? "" : "s"}{p.supervisors[0] && ` · ${p.supervisors.map((s) => s.name).join(", ")}`}{p.deadline && ` · due ${fmtDate(p.deadline)}`}</p>

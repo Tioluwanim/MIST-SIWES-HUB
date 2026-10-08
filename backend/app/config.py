@@ -30,9 +30,8 @@ class Settings(BaseSettings):
     seed_admin_email: str = "admin@example.com"
     seed_instructor_email: str = "instructor@example.com"
     seed_supervisor_email: str = "supervisor@example.com"
-    seed_real_student_uid: str = ""
-    seed_real_student_email: str = ""
-    seed_real_student_name: str = ""
+    seed_real_student_email: str = ""   # optional: a real student account to include in the demo data
+    seed_real_student_name: str = "Demo Student"
 
     @field_validator("database_url")
     @classmethod

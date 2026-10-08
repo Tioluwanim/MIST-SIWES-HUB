@@ -3,13 +3,14 @@ import { auth } from "./firebase";
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(public status: number, message: string, public detail?: unknown) {
     super(message);
   }
 }
 
 function messageFrom(detail: unknown, fallback: string): string {
   if (typeof detail === "string") return detail;
+  if (detail && typeof detail === "object" && typeof (detail as { message?: unknown }).message === "string") return (detail as { message: string }).message;
   if (Array.isArray(detail)) {
     return detail.map((d) => `${(d.loc ?? []).slice(1).join(".") || "field"}: ${d.msg}`).join("; ");
   }
@@ -35,7 +36,7 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
   }
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => null);
-  if (!res.ok) throw new ApiError(res.status, messageFrom(data?.detail, `Request failed (${res.status})`));
+  if (!res.ok) throw new ApiError(res.status, messageFrom(data?.detail ?? data?.detail?.message, `Request failed (${res.status})`), data?.detail);
   return data as T;
 }
 
@@ -62,8 +63,13 @@ export async function upload(file: File): Promise<{ name: string; url: string }>
 export async function uploadFile<T = any>(path: string, file: File): Promise<T> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`${API_URL}${path}`, { method: "POST", headers: await authHeader(), body: form });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, { method: "POST", headers: await authHeader(), body: form });
+  } catch {
+    throw new ApiError(0, "Cannot reach the server. Check your connection and try again.");
+  }
   const data = await res.json().catch(() => null);
-  if (!res.ok) throw new ApiError(res.status, messageFrom(data?.detail, "Upload failed"));
+  if (!res.ok) throw new ApiError(res.status, messageFrom(data?.detail, "Upload failed"), data?.detail);
   return data as T;
 }

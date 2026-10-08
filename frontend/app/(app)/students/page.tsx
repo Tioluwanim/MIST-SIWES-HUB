@@ -38,7 +38,7 @@ export default function StudentsPage() {
           <TableWrap>
             <thead><tr><th className="th">Name</th><th className="th">Batch</th><th className="th">Department / unit</th><th className="th">Sessions</th><th className="th">Rate</th>{admin && <th className="th" />}</tr></thead>
             <tbody>{data?.map((s) => (
-              <tr key={s.id}><td className="td"><b>{s.full_name}</b><br /><span className="text-xs text-ink-faint">{s.email}{s.matric_no && ` · ${s.matric_no}`}</span></td>
+              <tr key={s.id}><td className="td"><b>{s.full_name}</b><br /><span className="text-xs text-ink-faint">{s.email}{s.matric_no && ` · ${s.matric_no}`}{s.phone && ` · ${s.phone}`}</span></td>
                 <td className="td">{s.batch?.name ?? <span className="text-warn">Unassigned</span>}</td>
                 <td className="td">{s.department?.name ?? "—"}{s.unit && <><br /><span className="text-xs text-ink-faint">{s.unit.name}</span></>}</td>
                 <td className="td">{s.attendance.total}</td><td className="td"><RateText rate={s.attendance.rate} total={s.attendance.total} /></td>

@@ -3,7 +3,7 @@ export type Role = "student" | "instructor" | "supervisor" | "admin";
 export interface Profile {
   id: number; email: string; full_name: string; role: Role; is_active: boolean;
   department: { id: number; name: string } | null; unit: { id: number; name: string } | null;
-  student_id: number | null; batch: { id: number; name: string } | null; matric_no: string | null; institution: string | null;
+  student_id: number | null; batch: { id: number; name: string } | null; matric_no: string | null; institution: string | null; phone?: string | null;
 }
 export interface Session {
   id: number; title: string; description: string | null; training_class_id: number; class_name: string; program_name: string;

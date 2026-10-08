@@ -4,6 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useFetch } from "@/lib/hooks";
 import { fmtClock, fmtDate, fmtTime, firstName, greeting } from "@/lib/format";
 import type { Announcement, Project, Profile, Session, Stats } from "@/lib/types";
+import { DepartmentUnitForm } from "../DepartmentUnitForm";
 import { Badge, Card, Empty, ProgressBar, State } from "../ui";
 
 interface D {
@@ -23,6 +24,13 @@ export function StudentDashboard() {
             <h1 className="text-[22px] font-bold sm:text-2xl">{greeting()}, {firstName(profile!.full_name)}</h1>
             <p className="mt-1 text-sm text-ink-soft">{[profile!.unit?.name ?? profile!.department?.name, profile!.batch?.name].filter(Boolean).join(" · ") || "Waiting for the ministry to assign your batch and unit"}</p>
           </div>
+
+          {!(profile!.department && profile!.unit) && (
+            <Card title="Finish setting up your profile">
+              <p className="mb-4 text-sm text-ink-soft">Choose your department and unit so the ministry knows where you are placed. You can change this later from your profile.</p>
+              <DepartmentUnitForm />
+            </Card>
+          )}
 
           <section className="rounded-lg bg-brand p-5 text-white">
             <p className="text-sm text-white/70">Today&apos;s training</p>

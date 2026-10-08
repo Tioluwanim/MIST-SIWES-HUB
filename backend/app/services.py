@@ -21,6 +21,7 @@ def user_out(u: User) -> dict:
         "batch": {"id": st.batch.id, "name": st.batch.name} if st and st.batch else None,
         "matric_no": st.matric_no if st else None,
         "institution": st.institution if st else None,
+        "phone": st.phone if st else None,
     }
 
 

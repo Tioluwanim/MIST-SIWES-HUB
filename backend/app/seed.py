@@ -1,9 +1,10 @@
 """Development seed data: `python -m app.seed` (add --reset to wipe first)."""
 import random
 import sys
+from collections import Counter
 from datetime import date, datetime, time, timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, event, select
 
 from .config import get_settings
 from .db import Base, SessionLocal, engine
@@ -17,32 +18,55 @@ VENUE = ("MIST Training Hall, Alausa Secretariat, Ikeja", 6.6186, 3.3569)
 STUDENTS = ["Adaeze Okafor", "Tunde Bakare", "Chiamaka Eze", "Ibrahim Lawal", "Folake Adeyemi", "Emeka Nwosu",
             "Zainab Sanni", "Seyi Ogunleye", "Blessing Udoh", "Kunle Adebayo", "Hauwa Musa", "David Olatunji"]
 
+def delete_demo_rows(db, keep_user_ids=()) -> int:
+    """Delete ONLY rows flagged is_demo, children first. Admins and `keep_user_ids` are never removed."""
+    deleted = 0
+    for model in (AttendanceRecord, AttendanceSession, ProjectSubmission, ProjectMilestone, ProjectMember,
+                  ProjectSupervisor, Project, TrainingSession, TrainingMaterial, ClassEnrollment, TrainingClass,
+                  TrainingProgram, Student, User, Unit, Department, SiwesBatch, Announcement):
+        if not hasattr(model, "is_demo"):
+            continue  # join/attendance rows have no flag: they go with their demo parents (ON DELETE CASCADE)
+        stmt = delete(model).where(model.is_demo.is_(True))
+        if model is User:
+            stmt = stmt.where(User.role != "admin", User.id.notin_(list(keep_user_ids) or [0]))
+        deleted += db.execute(stmt).rowcount or 0
+    return deleted
+
+
 def run_seed(db=None, *, include_demo: bool = True, staff_emails: dict | None = None, reset: bool = False):
+    """Create demo data (idempotent). Everything created here, and nothing else, is flagged is_demo."""
     if not include_demo:
-        return {"created": 0, "updated": 0, "skipped": 0}
+        return {"created": 0, "updated": 0, "skipped": 0, "tables": {}, "warnings": []}
     s = get_settings()
     staff_emails = staff_emails or {}
-    real_student_data = {
-        "firebase_uid": s.seed_real_student_uid.strip(),
-        "email": s.seed_real_student_email.strip().lower(),
-        "full_name": s.seed_real_student_name.strip(),
-    }
-    use_real_student = all(real_student_data.values())
     if reset:
-        # Seed reset is deliberately non-destructive: production rows are not demo rows.
         with SessionLocal.begin() as reset_db:
-            for mapper in reversed(list(User.registry.mappers)):
-                model = mapper.class_
-                if hasattr(model, "is_demo"):
-                    reset_db.execute(delete(model).where(model.is_demo.is_(True)))
+            delete_demo_rows(reset_db)
     Base.metadata.create_all(engine)  # no-op when Alembic already created the tables
     owns_session = db is None
     db = db or SessionLocal()
-    if db.scalar(select(Department.id).where(Department.is_demo.is_(True)).limit(1)):
-        print("Database already seeded (use --reset to start over).")
+    warnings: list[str] = []
+    created: list = []
+
+    def _track(session, _ctx, _instances):
+        created.extend(session.new)
+
+    event.listen(db, "before_flush", _track)
+    try:
+        return _seed(db, s, staff_emails, owns_session, created, warnings)
+    except Exception:
+        if owns_session:
+            db.rollback()
+        raise
+    finally:
+        event.remove(db, "before_flush", _track)
         if owns_session:
             db.close()
-        return {"created": 0, "updated": 0, "skipped": 1}
+
+
+def _seed(db, s, staff_emails, owns_session, created, warnings):
+    if db.scalar(select(Department.id).where(Department.is_demo.is_(True)).limit(1)):
+        return {"created": 0, "updated": 0, "skipped": 1, "tables": {}, "warnings": ["Demo data already exists"]}
     random.seed(7)
     sw = Department(name="Software & Digital Services")
     hw = Department(name="Hardware & Embedded Systems")
@@ -55,43 +79,39 @@ def run_seed(db=None, *, include_demo: bool = True, staff_emails: dict | None = 
     db.add_all([batch, SiwesBatch(name="2027 SIWES Batch", year=2027, is_active=False)])
     db.flush()
 
-    admin_email = staff_emails.get("admin") or (s.seed_admin_email if "@" in s.seed_admin_email and not s.seed_admin_email.endswith("@example.com") else None)
-    instructor_email = staff_emails.get("instructor")
-    supervisor_email = staff_emails.get("supervisor")
-    staff = []
-    admin = User(email=admin_email.lower(), full_name="Folasade Williams", role="admin") if admin_email else None
-    instr = User(email=instructor_email.lower(), full_name="Engr. Kayode Balogun", role="instructor",
-                 department_id=sw.id, unit_id=units["Software Development"].id) if instructor_email else None
-    sup = User(email=supervisor_email.lower(), full_name="Dr. Ngozi Adebisi", role="supervisor", department_id=sw.id) if supervisor_email else None
-    staff = [u for u in (admin, instr, sup) if u]
-    db.add_all(staff)
+    admin_email = staff_emails.get("admin_email") or (s.seed_admin_email if "@" in s.seed_admin_email and not s.seed_admin_email.endswith("@example.com") else None)
 
-    # Reuse the real Firebase account if it already exists; otherwise provision it.
+    def staff_user(email, role, name, **kw):
+        if not email:
+            return None
+        email = email.strip().lower()
+        existing = db.scalar(select(User).where(User.email == email))
+        if existing:
+            if existing.role == role:
+                return existing  # reuse the real account; it is not demo data and is never flagged
+            warnings.append(f"{email} already exists as {existing.role}; skipped creating the demo {role}")
+            return None
+        user = User(email=email, full_name=name, role=role, **kw)
+        db.add(user)
+        return user
+
+    admin = staff_user(admin_email, "admin", "Folasade Williams")
+    instr = staff_user(staff_emails.get("instructor_email"), "instructor", "Engr. Kayode Balogun",
+                       department_id=sw.id, unit_id=units["Software Development"].id)
+    sup = staff_user(staff_emails.get("supervisor_email"), "supervisor", "Dr. Ngozi Adebisi", department_id=sw.id)
+    db.flush()
+
     studs = []
-    if use_real_student:
-        real_user = db.scalar(select(User).where(
-            (User.firebase_uid == real_student_data["firebase_uid"]) |
-            (User.email == real_student_data["email"])
-        ))
-        if real_user:
-            real_user.firebase_uid = real_student_data["firebase_uid"]
-            real_user.email = real_student_data["email"]
-            real_user.full_name = real_student_data["full_name"]
-            real_user.role = "student"
-            real_user.department_id = sw.id
-            real_user.unit_id = units["Software Development"].id
-            real_user.is_active = True
-            real_student = real_user.student or Student()
-            real_user.student = real_student
+    own_email = (s.seed_real_student_email or "").strip().lower()
+    if own_email:
+        if db.scalar(select(User.id).where(User.email == own_email)):
+            warnings.append(f"{own_email} already exists; it was not added as a demo student")
         else:
-            real_user = User(firebase_uid=real_student_data["firebase_uid"], email=real_student_data["email"],
-                             full_name=real_student_data["full_name"], role="student",
-                             department_id=sw.id, unit_id=units["Software Development"].id)
-            real_student = Student()
-            real_user.student = real_student
-        real_student.batch_id = batch.id
-        db.add(real_user)
-        studs.append(real_student)
+            mine = User(email=own_email, full_name=s.seed_real_student_name or "Demo Student", role="student",
+                        department_id=sw.id, unit_id=units["Software Development"].id)
+            mine.student = Student(batch_id=batch.id)
+            studs.append(mine.student)
+            db.add(mine)
     for i, name in enumerate(STUDENTS):
         unit = list(units.values())[0 if i < 6 else (1 if i < 9 else 2)]
         u = User(email=f"{name.split()[0].lower()}.{name.split()[1].lower()}@students.example.com", full_name=name,
@@ -175,23 +195,23 @@ def run_seed(db=None, *, include_demo: bool = True, staff_emails: dict | None = 
         Announcement(title="Backend class: install PostgreSQL", audience="class", class_id=backend.id, created_by=instr.id if instr else None,
                      message="Please install PostgreSQL 15+ before the next session."),
     ])
-    # Mark the complete graph (including attendance and join rows where supported)
-    # as demo data in one place, so future seed additions cannot be forgotten.
-    for obj in list(db.identity_map.values()) + list(db.new):
+    db.flush()  # lets the tracker see everything added since the last flush
+    tables = Counter(type(o).__name__ for o in created)
+    for obj in created:
         if hasattr(obj, "is_demo"):
             obj.is_demo = True
     if owns_session:
         db.commit()
-    if owns_session:
-        db.close()
-    return {"created": len(list(db.identity_map)) if db else 0, "updated": 0, "skipped": 0}
+    return {"created": len(created), "updated": 0, "skipped": 0, "tables": dict(tables), "warnings": warnings}
 
 
 def run(reset: bool = False, db=None):
-    return run_seed(db, reset=reset, staff_emails={"instructor": get_settings().seed_instructor_email,
-                                                    "supervisor": get_settings().seed_supervisor_email,
-                                                    "admin": get_settings().seed_admin_email})
+    cfg = get_settings()
+    return run_seed(db, reset=reset, staff_emails={"instructor_email": cfg.seed_instructor_email,
+                                                    "supervisor_email": cfg.seed_supervisor_email,
+                                                    "admin_email": cfg.seed_admin_email})
 
 
 if __name__ == "__main__":
-    run("--reset" in sys.argv)
+    print(run("--reset" in sys.argv))
+

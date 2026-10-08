@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import get_current_user, require_roles
-from ..models import Announcement, ClassEnrollment, Student, TrainingClass, User
+from ..models import Announcement, ClassEnrollment, Department, SiwesBatch, Student, TrainingClass, User
 from ..schemas import AnnouncementIn
 
 router = APIRouter(prefix="/api/announcements", tags=["announcements"])
@@ -43,10 +43,10 @@ def list_announcements(db: Session = Depends(get_db), me: User = Depends(get_cur
 @router.post("", status_code=201)
 def create_announcement(body: AnnouncementIn, db: Session = Depends(get_db),
                         me: User = Depends(require_roles("admin", "instructor"))):
-    if body.audience == "batch" and not body.batch_id:
-        raise HTTPException(422, "batch_id is required for a batch announcement")
-    if body.audience == "department" and not body.department_id:
-        raise HTTPException(422, "department_id is required for a department announcement")
+    if body.audience == "batch" and not (body.batch_id and db.get(SiwesBatch, body.batch_id)):
+        raise HTTPException(422, "Choose an existing SIWES batch for a batch announcement")
+    if body.audience == "department" and not (body.department_id and db.get(Department, body.department_id)):
+        raise HTTPException(422, "Choose an existing department for a department announcement")
     if body.audience == "class":
         c = db.get(TrainingClass, body.class_id) if body.class_id else None
         if not c:

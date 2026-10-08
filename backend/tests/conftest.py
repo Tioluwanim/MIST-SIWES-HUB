@@ -9,13 +9,14 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import security
-from app.db import Base, get_db
+from app.db import Base, configure_sqlite, get_db
 from app.main import app
 
 
 @pytest.fixture()
 def db_session():
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    configure_sqlite(engine)
     Base.metadata.create_all(engine)
     S = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     s = S()

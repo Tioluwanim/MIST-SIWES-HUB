@@ -12,3 +12,4 @@ firebase-service-account*.json
 .pytest_cache/
 next-env.d.ts
 tsconfig.tsbuildinfo
+node_modules

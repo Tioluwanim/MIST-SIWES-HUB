@@ -63,6 +63,7 @@ class Student(TimestampMixin, Base):
     batch_id: Mapped[int | None] = mapped_column(ForeignKey("siwes_batches.id", ondelete="SET NULL"), index=True)
     matric_no: Mapped[str | None] = mapped_column(String(40))
     institution: Mapped[str | None] = mapped_column(String(160))
+    phone: Mapped[str | None] = mapped_column(String(20))
     user: Mapped[User] = relationship(back_populates="student")
     batch: Mapped[SiwesBatch | None] = relationship()
 

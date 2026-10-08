@@ -105,3 +105,15 @@ def verify_firebase_token(token: str) -> dict:
         "email_verified": bool(d.get("email_verified")),
         "name": d.get("name") or "",
     }
+
+
+def delete_firebase_user(uid: str) -> bool:
+    """Best-effort removal of the Firebase login when a user is hard-deleted. Logs and returns False on failure."""
+    try:
+        if not init_firebase():
+            return False
+        fb_auth.delete_user(uid)
+        return True
+    except Exception as exc:
+        log.warning("Could not delete Firebase user %s: %s: %s", uid, type(exc).__name__, exc)
+        return False

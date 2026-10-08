@@ -1,8 +1,9 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
-import { api } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { useFetch } from "@/lib/hooks";
+import { DeleteButton } from "../admin/DeleteButton";
 import { fmtDate, fmtTime } from "@/lib/format";
 import type { Session } from "@/lib/types";
 import { Badge, Empty, State, TableWrap } from "../ui";
@@ -10,6 +11,7 @@ import { SessionForm } from "./SessionForm";
 
 export function SessionsPanel() {
   const { data, loading, error, reload } = useFetch<Session[]>("/api/sessions");
+  const { profile } = useAuth();
   const [open, setOpen] = useState(false);
   return (
     <div className="space-y-4">
@@ -22,7 +24,7 @@ export function SessionsPanel() {
               <tr key={s.id}><td className="td whitespace-nowrap">{fmtDate(s.date)}<br /><span className="text-xs text-ink-faint">{fmtTime(s.start_time)}–{fmtTime(s.end_time)}</span></td>
                 <td className="td font-medium">{s.title}</td><td className="td">{s.class_name}</td><td className="td text-ink-soft">{s.location ?? "—"}<br /><span className="text-xs">{s.allowed_radius_meters} m radius</span></td>
                 <td className="td"><Badge>{s.attendance_status}</Badge></td>
-                <td className="td"><div className="flex gap-2"><Link href={`/sessions/${s.id}`} className="btn-secondary btn-sm">{s.attendance_status === "Open" ? "Monitor" : "Attendance"}</Link><button className="btn-secondary btn-sm text-bad" onClick={() => { if (window.confirm("Delete this session?")) api(`/api/admin/sessions/${s.id}?force=true`, { method: "DELETE" }).then(() => reload(true)); }}>Delete</button></div></td></tr>
+                <td className="td whitespace-nowrap"><Link href={`/sessions/${s.id}`} className="btn-secondary btn-sm">{s.attendance_status === "Open" ? "Monitor" : "Attendance"}</Link>{profile?.role === "admin" && <> <DeleteButton path={`/api/admin/sessions/${s.id}`} noun="session" onDone={() => reload(true)} /></>}</td></tr>
             ))}</tbody>
           </TableWrap>
         )}

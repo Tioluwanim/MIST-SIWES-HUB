@@ -3,6 +3,7 @@ from datetime import date as Date
 from datetime import time as Time
 from typing import Literal
 
+from .phone import normalise_phone
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 Role = Literal["student", "instructor", "supervisor", "admin"]
@@ -65,6 +66,12 @@ class UserCreate(BaseModel):
     batch_id: int | None = None
     matric_no: str | None = None
     institution: str | None = None
+    phone: str | None = None
+
+    @field_validator("phone")
+    @classmethod
+    def valid_phone(cls, v):
+        return normalise_phone(v)
 
     @field_validator("email")
     @classmethod
@@ -81,6 +88,12 @@ class UserUpdate(BaseModel):
     batch_id: int | None = None
     matric_no: str | None = None
     institution: str | None = None
+    phone: str | None = None
+
+    @field_validator("phone")
+    @classmethod
+    def valid_phone(cls, v):
+        return normalise_phone(v)
 
 
 class RoleUpdate(BaseModel):
@@ -250,3 +263,9 @@ class AnnouncementIn(BaseModel):
     batch_id: int | None = None
     department_id: int | None = None
     class_id: int | None = None
+
+
+class MyProfileUpdate(BaseModel):
+    """What a student may change about themselves. Role, batch and email are never accepted here."""
+    department_id: int
+    unit_id: int

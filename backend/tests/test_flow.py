@@ -164,7 +164,9 @@ def test_announcement_audiences(client, db_session):
     ctx = bootstrap(client, db_session, n_students=1)
     s0 = auth("u-s0", "s0@mist.example.com")
     client.post("/api/announcements", json={"title": "All", "message": "hello all"}, headers=ADMIN)
-    client.post("/api/announcements", json={"title": "Other batch", "message": "no", "audience": "batch", "batch_id": 999}, headers=ADMIN)
+    other = client.post("/api/batches", json={"name": "2031 SIWES Batch", "year": 2031}, headers=ADMIN).json()
+    assert client.post("/api/announcements", json={"title": "Ghost", "message": "no", "audience": "batch", "batch_id": 999}, headers=ADMIN).status_code == 422
+    client.post("/api/announcements", json={"title": "Other batch", "message": "no", "audience": "batch", "batch_id": other["id"]}, headers=ADMIN)
     client.post("/api/announcements", json={"title": "My class", "message": "yes", "audience": "class",
                                             "class_id": ctx["cls"]["id"]}, headers=INSTR)
     titles = {a["title"] for a in client.get("/api/announcements", headers=s0).json()}
